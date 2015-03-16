@@ -76,14 +76,15 @@ class Options:
         self.quiet = False
         self.remount = False
         self.repos = []
+        self.excl_repos = []
         self.types = []
         self.umount = False
         self.update = False
         self.verbose = 1
 
         try:
-            opts, args = getopt.getopt(args, 'c:d:fghnqr:t:uvx',
-                ('config=', 'dist=', 'dry-run', 'force', 'generate', 'help', 'quiet', 'repo=',
+            opts, args = getopt.getopt(args, 'c:d:fghnqr:e:t:uvx',
+                ('config=', 'dist=', 'dry-run', 'force', 'generate', 'help', 'quiet', 'repo=', 'excl-repo='
                 'remount', 'type=', 'umount', 'unmount', 'update', 'verbose', 'version', 'extras'))
         except getopt.error, exc:
             print 'mrepo: %s, try mrepo -h for a list of all the options' % str(exc)
@@ -110,6 +111,8 @@ class Options:
                 self.quiet = True
             elif opt in ('-r', '--repo'):
                 self.repos = self.repos + arg.split(',')
+            elif opt in ('-e', '--excl-repo'):
+                self.excl_repos = self.excl_repos + arg.split(',')
             elif opt in ('--remount', ):
                 self.remount = True
             elif opt in ('-t', '--type'):
@@ -158,19 +161,20 @@ class Options:
         print '''Set up a distribution server from ISO files
 
 mrepo options:
-  -c, --config=file       specify alternative configfile
-  -f, --force             force repository generation
-  -g, --generate          generate mrepo repositories
-  -n, --dry-run           show what would have been done
-  -q, --quiet             minimal output
-  -r, --repo=repo1,repo2  restrict action to specific repositories
-      --remount           remount distribution ISOs
-  -t, --type=type1,type2  mirror types to use. Default: file, fish, ftp, http, https, mc, rhn, rhns, rsync, sftp, mrepo, you
-  -u, --update            fetch OS updates
-  -v, --verbose           increase verbosity
-      --version           print mrepo version information
-  -vv, -vvv, -vvvv..      increase verbosity more
-      --unmount           unmount distribution ISOs
+  -c, --config=file            specify alternative configfile
+  -f, --force                  force repository generation
+  -g, --generate               generate mrepo repositories
+  -n, --dry-run                show what would have been done
+  -q, --quiet                  minimal output
+  -r, --repo=repo1,repo2       restrict action to specific repositories
+  -e, --excl-repo=repo1,repo2  exclude specific repositories
+      --remount                remount distribution ISOs
+  -t, --type=type1,type2       mirror types to use. Default: file, fish, ftp, http, https, mc, rhn, rhns, rsync, sftp, mrepo, you
+  -u, --update                 fetch OS updates
+  -v, --verbose                increase verbosity
+      --version                print mrepo version information
+  -vv, -vvv, -vvvv..           increase verbosity more
+      --unmount                unmount distribution ISOs
 '''
 
 
@@ -441,17 +445,18 @@ class Dist:
         else:
             info(4, '%s: No ISO files found !' % self.nick)
 
-    def listrepos(self, names=None):
-        ret = []
+    def listrepos(self, names=None, exclude=None):
+        ret = self.repos
+        if exclude:
+            ret = [repo for repo in ret if repo.name not in exclude]
         if names:
-            return [repo for repo in self.repos if repo.name in names]
-        else:
-            return self.repos
+            ret = [repo for repo in ret if repo.name in names]
 
+        return ret
     def genmetadata(self):
         allsrcdirs = []
         pathjoin = os.path.join
-        for repo in self.listrepos(op.repos):
+        for repo in self.listrepos(op.repos,op.excl_repos):
             if not repo.lock('generate'):
                 continue
             if repo.name in ('os', 'core') and self.isos:
@@ -1784,7 +1789,7 @@ def main():
             distremoved = 0
 
             ### Downloading things
-            for repo in dist.listrepos(op.repos):
+            for repo in dist.listrepos(op.repos,op.excl_repos):
                 if not repo.lock('update'):
                     continue
                 if repo.name in ('os', 'core'):
